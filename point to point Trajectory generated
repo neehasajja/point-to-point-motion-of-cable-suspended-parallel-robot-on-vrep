@@ -1,0 +1,129 @@
+vrep=remApi('remoteApi');
+vrep.simxFinish(-1);
+clientID=vrep.simxStart('127.0.0.1',19999,true,true,5000,5);
+
+if (clientID>-1)
+        disp('Connected');
+        [returnCode,Wheel1]=vrep.simxGetObjectHandle(clientID,'wheel1',vrep.simx_opmode_blocking)
+        [returnCode,Wheel2]=vrep.simxGetObjectHandle(clientID,'wheel2',vrep.simx_opmode_blocking)
+        [returnCode,Wheel3]=vrep.simxGetObjectHandle(clientID,'wheel3',vrep.simx_opmode_blocking)
+        [returnCode,Wheel4]=vrep.simxGetObjectHandle(clientID,'wheel4',vrep.simx_opmode_blocking)
+        [returnCode,base]=vrep.simxGetObjectHandle(clientID,'base',vrep.simx_opmode_blocking)
+        [returnCode,P1]=vrep.simxGetObjectHandle(clientID,'Prismatic_joint',vrep.simx_opmode_blocking)
+        [returnCode,P2]=vrep.simxGetObjectHandle(clientID,'Prismatic_joint0',vrep.simx_opmode_blocking)
+        [returnCode,P3]=vrep.simxGetObjectHandle(clientID,'Prismatic_joint1',vrep.simx_opmode_blocking)
+        [returnCode,P4]=vrep.simxGetObjectHandle(clientID,'Prismatic_joint2',vrep.simx_opmode_blocking)
+        %code here
+        %get object initial position
+        [returnCode,Wheelpos1]=vrep.simxGetObjectPosition(clientID,Wheel1,-1,vrep.simx_opmode_blocking)
+        [returnCode,Wheelpos2]=vrep.simxGetObjectPosition(clientID,Wheel2,-1,vrep.simx_opmode_blocking)
+        [returnCode,Wheelpos3]=vrep.simxGetObjectPosition(clientID,Wheel3,-1,vrep.simx_opmode_blocking)
+        [returnCode,Wheelpos4]=vrep.simxGetObjectPosition(clientID,Wheel4,-1,vrep.simx_opmode_blocking)
+        %set object position,desired position
+        dp1 =[-0.12016578763723373, 0.24212755262851715, 0.19808071851730347]
+        dp2 =[-0.12023575603961945, 0.5122137665748596, 0.19860121607780457]
+        dp3 =[0.1720871925354004, 0.24215403199195862,0.1987399160861969]
+        dp4 =[0.17207024455070496, 0.5112758874893188,0.1987045407295227]
+        %print desired position
+        disp(dp1)
+        disp(dp2)
+        disp(dp3)
+        disp(dp4)
+        
+      
+        %set Y_initial
+        Y_initial1=Wheelpos1(1,2)
+        Y_initial2=Wheelpos2(1,2)
+        Y_initial3=Wheelpos3(1,2)
+        Y_initial4=Wheelpos4(1,2)
+        %print Y_initial
+        disp(Y_initial1)
+        disp(Y_initial2)
+        disp(Y_initial3)
+        disp(Y_initial4)
+        
+        %set Y_final
+        Y_final1=dp1(1,2)
+        Y_final2=dp2(1,2)
+        Y_final3=dp3(1,2)
+        Y_final4=dp4(1,2)
+        %print Y_final
+        disp(Y_final1)
+        disp(Y_final2)
+        disp(Y_final3)
+        disp(Y_final4)
+        
+        %defining the constants
+        dt=0.05;            %second
+        Tf=3;               %second
+        L=1;                % L should be bigger than v_max^2/Amax
+        init_velocity=0;
+        fin_velocity=0;
+        V_max=0.1;
+        A_max=0.1;
+        kp=[1,0,0;0,1,0;0,0,1];
+        Ts=V_max/A_max;
+        
+        %initialise variables
+        s=0;
+        velocity_commanded=0;
+        velocity_desired=0;
+        position_desired=0;
+        time=0:dt:Tf;
+        sigma=zeros(1,size(time,2));
+        dsigma=zeros(1,size(time,2));
+        i=1;
+        P_current1=Y_initial1;
+        P_current2=Y_initial2;
+        P_current3=Y_initial3;
+        P_current4=Y_initial4;
+        
+for t=0:dt:Tf
+
+if(t<=Ts)
+    sigma(1,i)=A_max*t*t/2;
+    dsigma(1,i)=A_max*t;
+elseif (t>Ts) && (t <= Tf-Ts)
+    sigma(1,i)=(V_max*t)-((V_max*V_max)/(2*A_max));
+    dsigma(1,i)=V_max;
+elseif (t>Tf-Ts) && (t <= Tf)
+    sigma(1,i)=(-A_max*(t-Tf)*(t-Tf)/2)+(V_max*Tf)-(V_max*V_max/A_max);
+    dsigma(1,i)=A_max*(Tf-t);
+end
+    
+   
+ t=t+dt;
+end
+
+%compute the desired position
+P_desired1=Y_initial1+s(t)*(Y_final1-Y_initial1);
+P_desired2=Y_initial2+s(t)*(Y_final2-Y_initial2);
+P_desired3=Y_initial3+s(t)*(Y_final3-Y_initial3);
+P_desired4=Y_initial4+s(t)*(Y_final4-Y_initial4);
+
+%compute the derivative position
+dp_desired1=((Y_final1-Y_initial1)/L)*dsigma
+dp_desired2=((Y_final2-Y_initial2)/L)*dsigma
+dp_desired3=((Y_final3-Y_initial3)/L)*dsigma
+dp_desired4=((Y_final4-Y_initial4)/L)*dsigma
+
+%derivative command for the robot
+dp_commanded1=dp_desired1+kp*(P_desired1-P_current1);
+dp_commanded2=dp_desired2+kp*(P_desired2-P_current2);
+dp_commanded3=dp_desired3+kp*(P_desired3-P_current3);
+dp_commanded4=dp_desired4+kp*(P_desired4-P_current4);
+
+%command to robot
+P_commanded1=P_current1-(dt*dp_commanded1);
+P_commanded2=P_current2-(dt*dp_commanded2);
+P_commanded3=P_current3-(dt*dp_commanded3);
+P_commanded4=P_current4-(dt*dp_commanded4);
+
+%[returnCode]=vrep.simxGetObjectPosition(clientID,Wheel1,P_commanded1,vrep.simx_opmode_blocking)
+%[returnCode]=vrep.simxGetObjectPosition(clientID,Wheel2,P_commanded2,vrep.simx_opmode_blocking)
+%[returnCode]=vrep.simxGetObjectPosition(clientID,Wheel3,P_commanded3,vrep.simx_opmode_blocking)
+%[returnCode]=vrep.simxGetObjectPosition(clientID,Wheel4,P_commanded4,vrep.simx_opmode_blocking)
+
+
+vrep.simxFinish(-1);
+end
